@@ -42,9 +42,9 @@ jobs:
         url: ${{ secrets.VAULT_ADDR }}
         token: ${{ secrets.VAULT_TOKEN }}
         secrets: |
-          secret/cicd sonarqube_token | SONAR_TOKEN;
-          secret/cicd sonarqube_host | SONAR_HOST_URL;
-          secret/cicd semgrep_token | SEMGREP_APP_TOKEN;
+          secret/data/cicd sonarqube_token | SONAR_TOKEN;
+          secret/data/cicd sonarqube_host | SONAR_HOST_URL;
+          secret/data/cicd semgrep_token | SEMGREP_APP_TOKEN;
 
     - name: Run Semgrep
       uses: returntocorp/semgrep-action@v1
@@ -79,12 +79,12 @@ jobs:
         url: ${{ secrets.VAULT_ADDR }}
         token: ${{ secrets.VAULT_TOKEN }}
         secrets: |
-          secret/cicd harbor_password | HARBOR_PASSWORD;
-          secret/cicd harbor_username | HARBOR_USERNAME;
-          secret/cicd sonarqube_token | SONAR_TOKEN;
-          secret/cicd gh_pat | GH_PAT;
-          secret/cicd sonarqube_host | SONAR_HOST_URL;
-          secret/cicd semgrep_token | SEMGREP_APP_TOKEN;
+          secret/data/cicd harbor_password | HARBOR_PASSWORD;
+          secret/data/cicd harbor_username | HARBOR_USERNAME;
+          secret/data/cicd sonarqube_token | SONAR_TOKEN;
+          secret/data/cicd gh_pat | GH_PAT;
+          secret/data/cicd sonarqube_host | SONAR_HOST_URL;
+          secret/data/cicd semgrep_token | SEMGREP_APP_TOKEN;
 
     - name: Set image tag
       id: vars
@@ -115,8 +115,9 @@ jobs:
         url: ${{ secrets.VAULT_ADDR }}
         token: ${{ secrets.VAULT_TOKEN }}
         secrets: |
-          secret/cicd argocd_server | ARGOCD_SERVER;
-          secret/cicd argocd_token | ARGOCD_TOKEN;
+          secret/data/cicd argocd_server | ARGOCD_SERVER;
+          secret/data/cicd argocd_token | ARGOCD_TOKEN;
+          secret/data/cicd gh_pat | GH_PAT;
     - name: Checkout manifests
       uses: actions/checkout@v3
       with:
@@ -227,7 +228,7 @@ jobs:
         url: ${{ secrets.VAULT_ADDR }}
         token: ${{ secrets.VAULT_TOKEN }}
         secrets: |
-          secret/cicd gh_pat | GH_PAT;
+          secret/data/cicd gh_pat | GH_PAT;
     - name: Merge feature branch
       uses: actions/github-script@v6
       with:
