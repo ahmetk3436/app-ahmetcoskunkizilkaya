@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - 'feature/**'
+      - main
 
 jobs:
   build-and-test:
@@ -54,18 +55,20 @@ jobs:
       uses: actions/setup-dotnet@v3
       with:
         dotnet-version: '6.0.x'
-    - name: Install dotnet-sonarscanner
-      run: dotnet tool install --global dotnet-sonarscanner --version 6.2.0
-    - name: Add to PATH
-      run: echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+    - name: Install SonarScanner
+      run: |
+        mkdir -p ./.sonar/scanner
+        dotnet tool install --tool-path ./.sonar/scanner dotnet-sonarscanner --version 10.3.0
+    - name: Add SonarScanner to PATH
+      run: echo "${{ github.workspace }}/.sonar/scanner" >> $GITHUB_PATH
     - name: SonarScanner begin
-      run: dotnet sonarscanner begin /k:"eShopOnWeb" /d:sonar.host.url="${{ env.SONAR_HOST_URL }}" /d:sonar.token="${{ env.SONAR_TOKEN }}"
+      run: dotnet-sonarscanner begin /k:"eShopOnWeb" /d:sonar.host.url="${{ env.SONAR_HOST_URL }}" /d:sonar.token="${{ env.SONAR_TOKEN }}"
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
       run: dotnet build --no-restore
     - name: SonarScanner end
-      run: dotnet sonarscanner end /d:sonar.token="${{ env.SONAR_TOKEN }}"
+      run: dotnet-sonarscanner end /d:sonar.token="${{ env.SONAR_TOKEN }}"
 
   docker:
     runs-on: ubuntu-latest
@@ -88,6 +91,10 @@ jobs:
           secret/data/ci sonarqube_host | SONAR_HOST_URL;
           secret/data/ci semgrep_token | SEMGREP_APP_TOKEN;
 
+    - name: Set image tag
+      id: vars
+      run: echo "image_tag=$(echo ${{ github.ref_name }} | tr '/' '-')-${{ github.sha }}" >> $GITHUB_OUTPUT
+
     - name: Login to Harbor
       uses: docker/login-action@v2
       with:
@@ -100,9 +107,9 @@ jobs:
       with:
         context: .
         push: true
-        tags: harbor.ahmetcoskunkizilkaya.com/app-ahmetcoskunkizilkaya:${{ github.sha }}
+        tags: harbor.ahmetcoskunkizilkaya.com/app-ahmetcoskunkizilkaya:${{ steps.vars.outputs.image_tag }}
 
-  deploy-dev:
+  manifest-update-dev:
     runs-on: ubuntu-latest
     needs: docker
 
@@ -114,25 +121,47 @@ jobs:
         token: ${{ secrets.VAULT_TOKEN }}
         secrets: |
           secret/data/ci gh_pat | GH_PAT;
+          secret/data/ci argocd_server | ARGOCD_SERVER;
+          secret/data/ci argocd_token | ARGOCD_TOKEN;
     - name: Checkout manifests
       uses: actions/checkout@v3
       with:
         repository: 'ahmetcoskunkizilkaya/manifest-ahmetcoskunkizilkaya'
         token: ${{ env.GH_PAT }}
         path: 'manifest-ahmetcoskunkizilkaya'
-
+    - name: Set image tag
+      id: vars
+      run: echo "image_tag=$(echo ${{ github.ref_name }} | tr '/' '-')-${{ github.sha }}" >> $GITHUB_OUTPUT
+    - name: Install kustomize
+      uses: imranismail/setup-kustomize@v1
+    - name: Install kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
     - name: Update image tag
+      working-directory: manifest-ahmetcoskunkizilkaya/overlays/dev
+      run: kustomize edit set image harbor.ahmetcoskunkizilkaya.com/app-ahmetcoskunkizilkaya:${{ steps.vars.outputs.image_tag }}
+    - name: Validate manifests
+      working-directory: manifest-ahmetcoskunkizilkaya/overlays/dev
+      run: kustomize build . | kubectl apply --dry-run=client -f -
+    - name: Commit and push
       run: |
-        cd manifest-ahmetcoskunkizilkaya/overlays/dev
-        kustomize edit set image harbor.ahmetcoskunkizilkaya.com/app-ahmetcoskunkizilkaya:${{ github.sha }}
+        cd manifest-ahmetcoskunkizilkaya
         git config --global user.name 'github-actions'
         git config --global user.email 'github-actions@github.com'
-        git commit -am "Update image to ${{ github.sha }}"
+        git commit -am "Update image to ${{ steps.vars.outputs.image_tag }}"
         git push
+    - name: Install ArgoCD CLI
+      run: |
+        curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+        sudo install -m 755 argocd-linux-amd64 /usr/local/bin/argocd
+    - name: Sync ArgoCD dev
+      run: argocd app sync dev-app --server ${{ env.ARGOCD_SERVER }} --auth-token ${{ env.ARGOCD_TOKEN }} --insecure
 
   dast:
     runs-on: ubuntu-latest
-    needs: deploy-dev
+    needs: manifest-update-dev
+    if: github.ref != 'refs/heads/main'
 
     steps:
     - name: OWASP ZAP Scan
@@ -140,9 +169,10 @@ jobs:
       with:
         target: 'http://dev.app.com'
 
-  deploy-prod:
+  manifest-update-prod:
     runs-on: ubuntu-latest
-    needs: dast
+    needs: docker
+    if: github.ref == 'refs/heads/main'
     environment:
       name: production
       url: http://prod.app.com
@@ -155,25 +185,47 @@ jobs:
         token: ${{ secrets.VAULT_TOKEN }}
         secrets: |
           secret/data/ci gh_pat | GH_PAT;
+          secret/data/ci argocd_server | ARGOCD_SERVER;
+          secret/data/ci argocd_token | ARGOCD_TOKEN;
     - name: Checkout manifests
       uses: actions/checkout@v3
       with:
         repository: 'ahmetcoskunkizilkaya/manifest-ahmetcoskunkizilkaya'
         token: ${{ env.GH_PAT }}
         path: 'manifest-ahmetcoskunkizilkaya'
-
+    - name: Set image tag
+      id: vars
+      run: echo "image_tag=$(echo ${{ github.ref_name }} | tr '/' '-')-${{ github.sha }}" >> $GITHUB_OUTPUT
+    - name: Install kustomize
+      uses: imranismail/setup-kustomize@v1
+    - name: Install kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
     - name: Update image tag
+      working-directory: manifest-ahmetcoskunkizilkaya/overlays/prod
+      run: kustomize edit set image harbor.ahmetcoskunkizilkaya.com/app-ahmetcoskunkizilkaya:${{ steps.vars.outputs.image_tag }}
+    - name: Validate manifests
+      working-directory: manifest-ahmetcoskunkizilkaya/overlays/prod
+      run: kustomize build . | kubectl apply --dry-run=client -f -
+    - name: Commit and push
       run: |
-        cd manifest-ahmetcoskunkizilkaya/overlays/prod
-        kustomize edit set image harbor.ahmetcoskunkizilkaya.com/app-ahmetcoskunkizilkaya:${{ github.sha }}
+        cd manifest-ahmetcoskunkizilkaya
         git config --global user.name 'github-actions'
         git config --global user.email 'github-actions@github.com'
-        git commit -am "Update image to ${{ github.sha }}"
+        git commit -am "Update image to ${{ steps.vars.outputs.image_tag }}"
         git push
+    - name: Install ArgoCD CLI
+      run: |
+        curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+        sudo install -m 755 argocd-linux-amd64 /usr/local/bin/argocd
+    - name: Sync ArgoCD prod
+      run: argocd app sync prod-app --server ${{ env.ARGOCD_SERVER }} --auth-token ${{ env.ARGOCD_TOKEN }} --insecure
 
   merge:
     runs-on: ubuntu-latest
-    needs: deploy-prod
+    needs: dast
+    if: github.ref != 'refs/heads/main'
 
     steps:
     - name: Import Secrets from Vault
