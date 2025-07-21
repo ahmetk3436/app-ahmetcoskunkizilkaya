@@ -50,11 +50,22 @@ jobs:
       with:
         publishToken: ${{ env.SEMGREP_APP_TOKEN }}
 
-    - name: SonarQube Scan
-      uses: sonarsource/sonarqube-scan-action@master
-      env:
-        SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '6.0.x'
+    - name: Install dotnet-sonarscanner
+      run: dotnet tool install --global dotnet-sonarscanner --version 6.2.0
+    - name: Add to PATH
+      run: echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+    - name: SonarScanner begin
+      run: dotnet sonarscanner begin /k:"eShopOnWeb" /d:sonar.host.url="${{ env.SONAR_HOST_URL }}" /d:sonar.token="${{ env.SONAR_TOKEN }}"
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --no-restore
+    - name: SonarScanner end
+      run: dotnet sonarscanner end /d:sonar.token="${{ env.SONAR_TOKEN }}"
 
   docker:
     runs-on: ubuntu-latest
