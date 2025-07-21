@@ -11,147 +11,151 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: '8.0.x'
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
 
-    - name: Restore dependencies
-      run: dotnet restore eShopOnWeb.sln
+      - name: Restore dependencies
+        run: dotnet restore eShopOnWeb.sln
 
-    - name: Build
-      run: dotnet build eShopOnWeb.sln --no-restore --configuration Release
+      - name: Build
+        run: dotnet build eShopOnWeb.sln --no-restore --configuration Release
 
-    - name: Test
-      run: dotnet test eShopOnWeb.sln --no-build --verbosity normal --configuration Release
+      - name: Test
+        run: dotnet test eShopOnWeb.sln --no-build --verbosity normal --configuration Release
 
   sast:
     runs-on: ubuntu-latest
     needs: build-and-test
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Import Secrets from Vault
-      uses: hashicorp/vault-action@v2
-      with:
-        url: ${{ secrets.VAULT_ADDR }}
-        token: ${{ secrets.VAULT_TOKEN }}
-        secrets: |
-          secret/data/cicd SONAR_TOKEN | SONAR_TOKEN;
-          secret/data/cicd SONAR_HOST | SONAR_HOST_URL;
-          secret/data/cicd SEMGREP_TOKEN | SEMGREP_APP_TOKEN;
+      - name: Import Secrets from Vault
+        uses: hashicorp/vault-action@v2
+        with:
+          url: ${{ secrets.VAULT_ADDR }}
+          token: ${{ secrets.VAULT_TOKEN }}
+          secrets: |
+            secret/data/cicd SONAR_TOKEN | SONAR_TOKEN;
+            secret/data/cicd SONAR_HOST | SONAR_HOST_URL;
+            secret/data/cicd SEMGREP_TOKEN | SEMGREP_APP_TOKEN;
 
-    - name: Run Semgrep
-      uses: returntocorp/semgrep-action@v1
-      with:
-        publishToken: ${{ env.SEMGREP_APP_TOKEN }}
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          publishToken: ${{ env.SEMGREP_APP_TOKEN }}
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: '8.0.x'
-    - name: Run SonarScanner
-      run: |
-        mkdir -p ./.sonar/scanner
-        dotnet tool install --tool-path ./.sonar/scanner dotnet-sonarscanner --version 10.3.0
-        export PATH="$PATH:${{ github.workspace }}/.sonar/scanner"
-        dotnet-sonarscanner begin /k:"eShopOnWeb" /d:sonar.host.url="${{ env.SONAR_HOST_URL }}" /d:sonar.token="${{ env.SONAR_TOKEN }}"
-        dotnet restore eShopOnWeb.sln
-        dotnet build eShopOnWeb.sln --no-restore
-        dotnet-sonarscanner end /d:sonar.token="${{ env.SONAR_TOKEN }}"
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Run SonarScanner
+        run: |
+          mkdir -p ./.sonar/scanner
+          dotnet tool install --tool-path ./.sonar/scanner dotnet-sonarscanner --version 10.3.0
+          export PATH="$PATH:${{ github.workspace }}/.sonar/scanner"
+          dotnet-sonarscanner begin /k:"eShopOnWeb" /d:sonar.host.url="${{ env.SONAR_HOST_URL }}" /d:sonar.token="${{ env.SONAR_TOKEN }}"
+          dotnet restore eShopOnWeb.sln
+          dotnet build eShopOnWeb.sln --no-restore
+          dotnet-sonarscanner end /d:sonar.token="${{ env.SONAR_TOKEN }}"
 
   docker:
     runs-on: ubuntu-latest
     needs: sast
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Import Secrets from Vault
-      uses: hashicorp/vault-action@v2
-      with:
-        url: ${{ secrets.VAULT_ADDR }}
-        token: ${{ secrets.VAULT_TOKEN }}
-        secrets: |
-          secret/data/cicd HARBOR_PASSWORD | HARBOR_PASSWORD;
-          secret/data/cicd HARBOR_USERNAME | HARBOR_USERNAME;
-          secret/data/cicd SONAR_TOKEN | SONAR_TOKEN;
-          secret/data/cicd GH_PAT | GH_PAT;
-          secret/data/cicd SONAR_HOST | SONAR_HOST_URL;
-          secret/data/cicd SEMGREP_TOKEN | SEMGREP_APP_TOKEN;
+      - name: Import Secrets from Vault
+        uses: hashicorp/vault-action@v2
+        with:
+          url: ${{ secrets.VAULT_ADDR }}
+          token: ${{ secrets.VAULT_TOKEN }}
+          secrets: |
+            secret/data/cicd HARBOR_PASSWORD | HARBOR_PASSWORD;
+            secret/data/cicd HARBOR_USERNAME | HARBOR_USERNAME;
+            secret/data/cicd SONAR_TOKEN | SONAR_TOKEN;
+            secret/data/cicd GH_PAT | GH_PAT;
+            secret/data/cicd SONAR_HOST | SONAR_HOST_URL;
+            secret/data/cicd SEMGREP_TOKEN | SEMGREP_APP_TOKEN;
 
-    - name: Set image tag
-      id: vars
-      run: echo "image_tag=$(echo ${{ github.ref_name }} | tr '/' '-')-${{ github.sha }}" >> $GITHUB_OUTPUT
+      - name: Set image tag
+        id: vars
+        run: echo "image_tag=$(echo ${{ github.ref_name }} | tr '/' '-')-${{ github.sha }}" >> $GITHUB_OUTPUT
 
-    - name: Login to Harbor
-      uses: docker/login-action@v2
-      with:
-        registry: harbor.ahmetcoskunkizilkaya.com
-        username: ${{ env.HARBOR_USERNAME }}
-        password: ${{ env.HARBOR_PASSWORD }}
+      - name: Login to Harbor
+        uses: docker/login-action@v2
+        with:
+          registry: harbor.ahmetcoskunkizilkaya.com
+          username: ${{ env.HARBOR_USERNAME }}
+          password: ${{ env.HARBOR_PASSWORD }}
 
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v4
-      with:
-        context: .
-        push: true
-        tags: harbor.ahmetcoskunkizilkaya.com/app-ahmetcoskunkizilkaya:${{ steps.vars.outputs.image_tag }}
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: harbor.ahmetcoskunkizilkaya.com/app-ahmetcoskunkizilkaya:${{ steps.vars.outputs.image_tag }}
 
   manifest-update-dev:
     runs-on: ubuntu-latest
     needs: docker
 
     steps:
-    - name: Import Secrets from Vault
-      uses: hashicorp/vault-action@v2
-      with:
-        url: ${{ secrets.VAULT_ADDR }}
-        token: ${{ secrets.VAULT_TOKEN }}
-        secrets: |
-          secret/data/cicd ARGOCD_SERVER | ARGOCD_SERVER;
-          secret/data/cicd ARGOCD_TOKEN | ARGOCD_TOKEN;
-          secret/data/cicd GH_PAT | GH_PAT;
-    - name: Checkout manifests
-      uses: actions/checkout@v3
-      with:
-        repository: 'ahmetcoskunkizilkaya/manifest-ahmetcoskunkizilkaya'
-        token: ${{ env.GH_PAT }}
-        path: 'manifest-ahmetcoskunkizilkaya'
-    - name: Set image tag
-      id: vars
-      run: echo "image_tag=$(echo ${{ github.ref_name }} | tr '/' '-')-${{ github.sha }}" >> $GITHUB_OUTPUT
-    - name: Install kustomize
-      uses: imranismail/setup-kustomize@v1
-    - name: Install kubectl
-      uses: azure/setup-kubectl@v3
-      with:
-        version: 'latest'
-    - name: Update image tag
-      working-directory: manifest-ahmetcoskunkizilkaya/overlays/dev
-      run: kustomize edit set image harbor.ahmetcoskunkizilkaya.com/app-ahmetcoskunkizilkaya:${{ steps.vars.outputs.image_tag }}
-    - name: Validate manifests
-      working-directory: manifest-ahmetcoskunkizilkaya/overlays/dev
-      run: kustomize build . | kubectl apply --dry-run=client -f -
-    - name: Commit and push
-      run: |
-        cd manifest-ahmetcoskunkizilkaya
-        git config --global user.name 'github-actions'
-        git config --global user.email 'github-actions@github.com'
-        git commit -am "Update image to ${{ steps.vars.outputs.image_tag }}"
-        git push
-    - name: Install ArgoCD CLI
-      run: |
-        curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-        sudo install -m 755 argocd-linux-amd64 /usr/local/bin/argocd
-    - name: Sync ArgoCD dev
-      run: argocd app sync dev-app --server ${{ env.ARGOCD_SERVER }} --auth-token ${{ env.ARGOCD_TOKEN }} --insecure
+      - name: Import Secrets from Vault
+        uses: hashicorp/vault-action@v2
+        with:
+          url: ${{ secrets.VAULT_ADDR }}
+          token: ${{ secrets.VAULT_TOKEN }}
+          secrets: |
+            secret/data/cicd GH_PAT | GH_PAT;
+
+      - name: Checkout manifests
+        uses: actions/checkout@v3
+        with:
+          repository: 'ahmetcoskunkizilkaya/manifest-ahmetcoskunkizilkaya'
+          token: ${{ env.GH_PAT }}
+          path: 'manifest-ahmetcoskunkizilkaya'
+
+      - name: Set image tag
+        id: vars
+        run: |
+          echo "image_tag=$(echo ${{ github.ref_name }} | tr '/' '-')-${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Install kustomize
+        uses: imranismail/setup-kustomize@v1
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Update image tag (dev)
+        working-directory: manifest-ahmetcoskunkizilkaya/overlays/dev
+        run: |
+          kustomize edit set image \
+            harbor.ahmetcoskunkizilkaya.com/app-ahmetcoskunkizilkaya:${{ steps.vars.outputs.image_tag }}
+
+      - name: Validate manifests
+        working-directory: manifest-ahmetcoskunkizilkaya/overlays/dev
+        run: |
+          kustomize build . | kubectl apply --dry-run=client -f -
+
+      - name: Commit & Push manifests (dev)
+        run: |
+          cd manifest-ahmetcoskunkizilkaya
+          git config --global user.name 'github-actions'
+          git config --global user.email 'github-actions@github.com'
+          git commit -am "Update image to ${{ steps.vars.outputs.image_tag }}"
+          git push
 
   dast:
     runs-on: ubuntu-latest
@@ -159,10 +163,10 @@ jobs:
     if: github.ref != 'refs/heads/main'
 
     steps:
-    - name: OWASP ZAP Scan
-      uses: zaproxy/action-full-scan@v0.4.0
-      with:
-        target: 'http://dev.app.com'
+      - name: OWASP ZAP Scan
+        uses: zaproxy/action-full-scan@v0.4.0
+        with:
+          target: 'http://dev.app.com'
 
   manifest-update-prod:
     runs-on: ubuntu-latest
@@ -173,48 +177,52 @@ jobs:
       url: http://prod.app.com
 
     steps:
-    - name: Import Secrets from Vault
-      uses: hashicorp/vault-action@v2
-      with:
-        url: ${{ secrets.VAULT_ADDR }}
-        token: ${{ secrets.VAULT_TOKEN }}
-        secrets: |
-          secret/data/cicd ARGOCD_SERVER | ARGOCD_SERVER;
-          secret/data/cicd ARGOCD_TOKEN | ARGOCD_TOKEN;
-    - name: Checkout manifests
-      uses: actions/checkout@v3
-      with:
-        repository: 'ahmetcoskunkizilkaya/manifest-ahmetcoskunkizilkaya'
-        token: ${{ env.GH_PAT }}
-        path: 'manifest-ahmetcoskunkizilkaya'
-    - name: Set image tag
-      id: vars
-      run: echo "image_tag=$(echo ${{ github.ref_name }} | tr '/' '-')-${{ github.sha }}" >> $GITHUB_OUTPUT
-    - name: Install kustomize
-      uses: imranismail/setup-kustomize@v1
-    - name: Install kubectl
-      uses: azure/setup-kubectl@v3
-      with:
-        version: 'latest'
-    - name: Update image tag
-      working-directory: manifest-ahmetcoskunkizilkaya/overlays/prod
-      run: kustomize edit set image harbor.ahmetcoskunkizilkaya.com/app-ahmetcoskunkizilkaya:${{ steps.vars.outputs.image_tag }}
-    - name: Validate manifests
-      working-directory: manifest-ahmetcoskunkizilkaya/overlays/prod
-      run: kustomize build . | kubectl apply --dry-run=client -f -
-    - name: Commit and push
-      run: |
-        cd manifest-ahmetcoskunkizilkaya
-        git config --global user.name 'github-actions'
-        git config --global user.email 'github-actions@github.com'
-        git commit -am "Update image to ${{ steps.vars.outputs.image_tag }}"
-        git push
-    - name: Install ArgoCD CLI
-      run: |
-        curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-        sudo install -m 755 argocd-linux-amd64 /usr/local/bin/argocd
-    - name: Sync ArgoCD prod
-      run: argocd app sync prod-app --server ${{ env.ARGOCD_SERVER }} --auth-token ${{ env.ARGOCD_TOKEN }} --insecure
+      - name: Import Secrets from Vault
+        uses: hashicorp/vault-action@v2
+        with:
+          url: ${{ secrets.VAULT_ADDR }}
+          token: ${{ secrets.VAULT_TOKEN }}
+          secrets: |
+            secret/data/cicd GH_PAT | GH_PAT;
+
+      - name: Checkout manifests
+        uses: actions/checkout@v3
+        with:
+          repository: 'ahmetcoskunkizilkaya/manifest-ahmetcoskunkizilkaya'
+          token: ${{ env.GH_PAT }}
+          path: 'manifest-ahmetcoskunkizilkaya'
+
+      - name: Set image tag
+        id: vars
+        run: |
+          echo "image_tag=main-${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Install kustomize
+        uses: imranismail/setup-kustomize@v1
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Update image tag (prod)
+        working-directory: manifest-ahmetcoskunkizilkaya/overlays/prod
+        run: |
+          kustomize edit set image \
+            harbor.ahmetcoskunkizilkaya.com/app-ahmetcoskunkizilkaya:${{ steps.vars.outputs.image_tag }}
+
+      - name: Validate manifests
+        working-directory: manifest-ahmetcoskunkizilkaya/overlays/prod
+        run: |
+          kustomize build . | kubectl apply --dry-run=client -f -
+
+      - name: Commit & Push manifests (prod)
+        run: |
+          cd manifest-ahmetcoskunkizilkaya
+          git config --global user.name 'github-actions'
+          git config --global user.email 'github-actions@github.com'
+          git commit -am "Update image to ${{ steps.vars.outputs.image_tag }}"
+          git push
 
   merge:
     runs-on: ubuntu-latest
@@ -222,46 +230,47 @@ jobs:
     if: github.ref != 'refs/heads/main'
 
     steps:
-    - name: Import Secrets from Vault
-      uses: hashicorp/vault-action@v2
-      with:
-        url: ${{ secrets.VAULT_ADDR }}
-        token: ${{ secrets.VAULT_TOKEN }}
-        secrets: |
-          secret/data/cicd GH_PAT | GH_PAT;
-    - name: Merge feature branch
-      uses: actions/github-script@v6
-      with:
-        github-token: ${{ env.GH_PAT }}
-        script: |
-          const branch = context.ref.replace('refs/heads/', '');
-          const { repo, owner } = context.repo;
-          // Find or create PR
-          let pull_number;
-          const prs = await github.rest.pulls.list({
-            owner,
-            repo,
-            head: `${owner}:${branch}`,
-            base: 'main',
-            state: 'open'
-          });
-          if (prs.data.length > 0) {
-            pull_number = prs.data[0].number;
-          } else {
-            const pr = await github.rest.pulls.create({
+      - name: Import Secrets from Vault
+        uses: hashicorp/vault-action@v2
+        with:
+          url: ${{ secrets.VAULT_ADDR }}
+          token: ${{ secrets.VAULT_TOKEN }}
+          secrets: |
+            secret/data/cicd GH_PAT | GH_PAT;
+
+      - name: Merge feature branch
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ env.GH_PAT }}
+          script: |
+            const branch = context.ref.replace('refs/heads/', '');
+            const { repo, owner } = context.repo;
+            // Find or create PR
+            let pull_number;
+            const prs = await github.rest.pulls.list({
               owner,
               repo,
-              head: branch,
+              head: `${owner}:${branch}`,
               base: 'main',
-              title: `Merge ${branch} into main`,
-              body: 'Automated merge after successful CI/CD'
+              state: 'open'
             });
-            pull_number = pr.data.number;
-          }
-          // Merge
-          await github.rest.pulls.merge({
-            owner,
-            repo,
-            pull_number,
-            merge_method: 'squash'
-          });
+            if (prs.data.length > 0) {
+              pull_number = prs.data[0].number;
+            } else {
+              const pr = await github.rest.pulls.create({
+                owner,
+                repo,
+                head: branch,
+                base: 'main',
+                title: `Merge ${branch} into main`,
+                body: 'Automated merge after successful CI/CD'
+              });
+              pull_number = pr.data.number;
+            }
+            // Merge
+            await github.rest.pulls.merge({
+              owner,
+              repo,
+              pull_number,
+              merge_method: 'squash'
+            });
