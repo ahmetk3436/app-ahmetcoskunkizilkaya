@@ -35,16 +35,26 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
+    - name: Import Secrets from Vault
+      uses: hashicorp/vault-action@v2
+      with:
+        url: ${{ secrets.VAULT_ADDR }}
+        token: ${{ secrets.VAULT_TOKEN }}
+        secrets: |
+          secret/data/ci sonarqube_token | SONAR_TOKEN;
+          secret/data/ci sonarqube_host | SONAR_HOST_URL;
+          secret/data/ci semgrep_token | SEMGREP_APP_TOKEN;
+
     - name: Run Semgrep
       uses: returntocorp/semgrep-action@v1
       with:
-        publishToken: ${{ secrets.SEMGREP_APP_TOKEN }}
+        publishToken: ${{ env.SEMGREP_APP_TOKEN }}
 
     - name: SonarQube Scan
       uses: sonarsource/sonarqube-scan-action@master
       env:
         SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
 
   docker:
     runs-on: ubuntu-latest
@@ -54,7 +64,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Login to Harbor
     - name: Import Secrets from Vault
       uses: hashicorp/vault-action@v2
       with:
@@ -65,6 +74,8 @@ jobs:
           secret/data/ci harbor_username | HARBOR_USERNAME;
           secret/data/ci sonarqube_token | SONAR_TOKEN;
           secret/data/ci gh_pat | GH_PAT;
+          secret/data/ci sonarqube_host | SONAR_HOST_URL;
+          secret/data/ci semgrep_token | SEMGREP_APP_TOKEN;
 
     - name: Login to Harbor
       uses: docker/login-action@v2
@@ -85,6 +96,13 @@ jobs:
     needs: docker
 
     steps:
+    - name: Import Secrets from Vault
+      uses: hashicorp/vault-action@v2
+      with:
+        url: ${{ secrets.VAULT_ADDR }}
+        token: ${{ secrets.VAULT_TOKEN }}
+        secrets: |
+          secret/data/ci gh_pat | GH_PAT;
     - name: Checkout manifests
       uses: actions/checkout@v3
       with:
@@ -119,6 +137,13 @@ jobs:
       url: http://prod.app.com
 
     steps:
+    - name: Import Secrets from Vault
+      uses: hashicorp/vault-action@v2
+      with:
+        url: ${{ secrets.VAULT_ADDR }}
+        token: ${{ secrets.VAULT_TOKEN }}
+        secrets: |
+          secret/data/ci gh_pat | GH_PAT;
     - name: Checkout manifests
       uses: actions/checkout@v3
       with:
@@ -140,13 +165,43 @@ jobs:
     needs: deploy-prod
 
     steps:
+    - name: Import Secrets from Vault
+      uses: hashicorp/vault-action@v2
+      with:
+        url: ${{ secrets.VAULT_ADDR }}
+        token: ${{ secrets.VAULT_TOKEN }}
+        secrets: |
+          secret/data/ci gh_pat | GH_PAT;
     - name: Merge feature branch
       uses: actions/github-script@v6
       with:
-        github-token: ${{env.GH_PAT}}
+        github-token: ${{ env.GH_PAT }}
         script: |
+          const branch = context.ref.replace('refs/heads/', '');
           const { repo, owner } = context.repo;
-          const pull_number = context.payload.pull_request.number;
+          // Find or create PR
+          let pull_number;
+          const prs = await github.rest.pulls.list({
+            owner,
+            repo,
+            head: `${owner}:${branch}`,
+            base: 'main',
+            state: 'open'
+          });
+          if (prs.data.length > 0) {
+            pull_number = prs.data[0].number;
+          } else {
+            const pr = await github.rest.pulls.create({
+              owner,
+              repo,
+              head: branch,
+              base: 'main',
+              title: `Merge ${branch} into main`,
+              body: 'Automated merge after successful CI/CD'
+            });
+            pull_number = pr.data.number;
+          }
+          // Merge
           await github.rest.pulls.merge({
             owner,
             repo,
