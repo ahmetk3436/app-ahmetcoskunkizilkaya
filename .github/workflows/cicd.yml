@@ -54,21 +54,16 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: '6.0.x'
-    - name: Install SonarScanner
+        dotnet-version: '8.0.x'
+    - name: Run SonarScanner
       run: |
         mkdir -p ./.sonar/scanner
         dotnet tool install --tool-path ./.sonar/scanner dotnet-sonarscanner --version 10.3.0
-    - name: Add SonarScanner to PATH
-      run: echo "${{ github.workspace }}/.sonar/scanner" >> $GITHUB_PATH
-    - name: SonarScanner begin
-      run: dotnet-sonarscanner begin /k:"eShopOnWeb" /d:sonar.host.url="${{ env.SONAR_HOST_URL }}" /d:sonar.token="${{ env.SONAR_TOKEN }}"
-    - name: Restore dependencies
-      run: dotnet restore
-    - name: Build
-      run: dotnet build --no-restore
-    - name: SonarScanner end
-      run: dotnet-sonarscanner end /d:sonar.token="${{ env.SONAR_TOKEN }}"
+        export PATH="$PATH:${{ github.workspace }}/.sonar/scanner"
+        dotnet-sonarscanner begin /k:"eShopOnWeb" /d:sonar.host.url="${{ env.SONAR_HOST_URL }}" /d:sonar.token="${{ env.SONAR_TOKEN }}"
+        dotnet restore eShopOnWeb.sln
+        dotnet build eShopOnWeb.sln --no-restore
+        dotnet-sonarscanner end /d:sonar.token="${{ env.SONAR_TOKEN }}"
 
   docker:
     runs-on: ubuntu-latest
