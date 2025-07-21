@@ -42,12 +42,9 @@ jobs:
           secrets: |
             secret/data/cicd SONAR_TOKEN | SONAR_TOKEN;
             secret/data/cicd SONAR_HOST | SONAR_HOST_URL;
-            secret/data/cicd SEMGREP_TOKEN | SEMGREP_APP_TOKEN;
 
       - name: Run Semgrep
         uses: returntocorp/semgrep-action@v1
-        with:
-          publishToken: ${{ env.SEMGREP_APP_TOKEN }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
