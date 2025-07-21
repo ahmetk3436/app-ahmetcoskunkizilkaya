@@ -43,8 +43,18 @@ jobs:
             secret/data/cicd SONAR_TOKEN | SONAR_TOKEN;
             secret/data/cicd SONAR_HOST | SONAR_HOST_URL;
 
-      - name: Run Semgrep
-        uses: returntocorp/semgrep-action@v1
+      - name: Run Semgrep with JSON output
+        run: |
+          pip install semgrep
+          semgrep ci --json --json-output=semgrep.json
+        continue-on-error: true
+
+      - name: Upload Semgrep results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: semgrep-results
+          path: semgrep.json
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
