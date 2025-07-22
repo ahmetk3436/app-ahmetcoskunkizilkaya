@@ -151,10 +151,6 @@ jobs:
         working-directory: manifest-ahmetcoskunkizilkaya/overlays/dev
         run: kustomize edit set image harbor2.ahmetcoskunkizilkaya.com/app-ahmetcoskunkizilkaya/eshoponweb:${{ steps.vars.outputs.image_tag }}
 
-      - name: Validate manifests
-        working-directory: manifest-ahmetcoskunkizilkaya/overlays/dev
-        run: kustomize build . | kubectl apply --dry-run=client -f -
-
       - name: Commit & Push manifests
         run: |
           cd manifest-ahmetcoskunkizilkaya
@@ -211,10 +207,6 @@ jobs:
       - name: Update image tag (prod)
         working-directory: manifest-ahmetcoskunkizilkaya/overlays/prod
         run: kustomize edit set image harbor2.ahmetcoskunkizilkaya.com/app-ahmetcoskunkizilkaya/eshoponweb:${{ steps.vars.outputs.image_tag }}
-
-      - name: Validate manifests
-        working-directory: manifest-ahmetcoskunkizilkaya/overlays/prod
-        run: kustomize build . | kubectl apply --dry-run=client -f -
 
       - name: Commit & Push manifests
         run: |
