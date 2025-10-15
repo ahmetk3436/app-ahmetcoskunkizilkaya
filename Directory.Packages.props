@@ -2,7 +2,7 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <TargetFramework>net8.0</TargetFramework>
-    <AspNetVersion>8.0.18</AspNetVersion>
+    <AspNetVersion>8.0.21</AspNetVersion>
     <SystemExtensionVersion>9.0.7</SystemExtensionVersion>
     <EntityFramworkCoreVersion>9.0.7</EntityFramworkCoreVersion>
     <VSCodeGeneratorVersion>9.0.0</VSCodeGeneratorVersion>
